@@ -1,0 +1,807 @@
+================================================================================
+PROJECT 2: HEALTHCARE ANALYTICS DASHBOARD
+Power BI Project Documentation
+Altera Digital Health - Interview Preparation
+================================================================================
+
+================================================================================
+PART 1: DASHBOARD OVERVIEW
+================================================================================
+
+PROJECT NAME: Hospital Financial & Operations Dashboard
+PURPOSE: Real-time visibility into patient visits, revenue, and department 
+         performance for Altera Digital Health
+AUDIENCE: Hospital administrators, Finance managers, Department heads
+DATA SOURCE: SQL Server Hospital Database
+REFRESH FREQUENCY: Daily
+
+TARGET USERS:
+- CFO: Revenue trends, collection rates
+- COO: Capacity utilization, doctor productivity
+- Department Heads: Visit volume, patient distribution
+- Billing Manager: Outstanding payments, aging analysis
+
+================================================================================
+PART 2: DATA MODEL ARCHITECTURE
+================================================================================
+
+DATA TABLES:
+1. FactVisits
+   - VisitID, PatientID, DoctorID, DepartmentID
+   - VisitDate, BillingAmount, PaymentStatus
+   - Fact table (contains measures)
+
+2. DimPatients
+   - PatientID, Name, Age, Gender
+   - Registration Date
+   - Dimension table (attributes)
+
+3. DimDoctors
+   - DoctorID, Name, Specialization
+   - Department Assignment
+   - Years of Experience
+
+4. DimDepartments
+   - DepartmentID, DepartmentName
+   - Location, Budget
+
+5. DimDate (Calendar Table)
+   - Date, Month, Quarter, Year
+   - Week Number
+   - Day of Week
+
+RELATIONSHIPS:
+FactVisits → DimPatients (PatientID)
+FactVisits → DimDoctors (DoctorID)
+FactVisits → DimDepartments (DepartmentID)
+FactVisits → DimDate (VisitDate)
+
+Type: Star Schema (most performant for dashboards)
+
+================================================================================
+PART 3: DASHBOARD PAGES & VISUALIZATIONS
+================================================================================
+
+PAGE 1: EXECUTIVE OVERVIEW
+────────────────────────────────────────────────────────────────────────
+
+Visual 1: KPI Cards (Top of page)
+- Total Revenue (February 2026)
+- Total Visits
+- Active Patients
+- Collection Rate %
+
+Visual 2: Revenue Trend (Line Chart)
+- X-axis: Date
+- Y-axis: Revenue Amount
+- Shows daily revenue trajectory
+- Key insight: Identify patterns (weekend dips, seasonal trends)
+
+Visual 3: Department Performance (Column Chart)
+- X-axis: Department Name
+- Y-axis: Total Revenue
+- Shows revenue by department
+- Quick identification of revenue drivers
+
+Visual 4: Payment Status Pie Chart
+- Slices: Paid, Pending, Partial
+- Shows collection health
+- Target: 80% paid, <15% pending
+
+PAGE 2: FINANCIAL ANALYSIS
+────────────────────────────────────────────────────────────────────────
+
+Visual 1: Revenue by Visit Type (Stacked Column)
+- Consultation, Follow-up, Emergency
+- Shows mix of revenue sources
+- Emergency typically lower revenue but critical volume
+
+Visual 2: Billing Aging Analysis (Table)
+- Days Overdue, Number of Bills, Total Amount
+- Highlights payment collection issues
+- <30 days, 30-60 days, 60-90 days, >90 days buckets
+
+Visual 3: Average Billing by Department (Horizontal Bar)
+- Shows which departments generate highest revenue per visit
+- Cardiology typically high, Pediatrics lower
+
+Visual 4: Collections by Payment Status (Waterfall)
+- Starting Total Billed
+- - Pending
+- - Partial (as reduction)
+- = Net Collections
+
+PAGE 3: OPERATIONAL METRICS
+────────────────────────────────────────────────────────────────────────
+
+Visual 1: Doctor Productivity (Card Visual with Sparkline)
+- Doctor Name, Visit Count, Trend
+- Shows who's busiest
+- Identifies performance outliers
+
+Visual 2: Visit Distribution (Donut Chart)
+- By department percentage
+- Emergency should be ~20%, routine 80%
+
+Visual 3: Patient Demographics (Scatter Plot)
+- Age vs Billing Amount
+- Identifies if older patients = higher costs
+- Helps with resource allocation
+
+Visual 4: Staffing vs Visits (Bullet Chart)
+- Target visits per doctor
+- Actual visits achieved
+- Identifies understaffed departments
+
+PAGE 4: DETAILED ANALYSIS
+────────────────────────────────────────────────────────────────────────
+
+Visual 1: Patient Visit History (Matrix/Table)
+- Rows: Patient Name
+- Columns: Month
+- Values: Visit Count
+- Drill-down to individual visits
+
+Visual 2: Top 10 Patients (Table)
+- By visit frequency
+- By total billing
+- Identifies VIP/frequent patients
+
+Visual 3: Slicers (Filter Panel)
+- Date Range (From - To)
+- Department (Multi-select)
+- Doctor Name (Multi-select)
+- Visit Type (Consultation, Emergency, Follow-up)
+- Payment Status
+
+Visual 4: Drill-through Capability
+- Click on doctor → see their patient list
+- Click on department → see visit details
+
+================================================================================
+PART 4: DAX FORMULAS & MEASURES
+================================================================================
+
+BASIC MEASURES:
+────────────────────────────────────────────────────────────────────────
+
+Measure 1: Total Revenue
+Total Revenue = SUM(FactVisits[BillingAmount])
+
+Measure 2: Total Visits
+Total Visits = COUNTROWS(FactVisits)
+
+Measure 3: Active Patients (Unique)
+Active Patients = DISTINCTCOUNT(FactVisits[PatientID])
+
+Measure 4: Average Billing per Visit
+Avg Billing = AVERAGE(FactVisits[BillingAmount])
+
+INTERMEDIATE MEASURES:
+────────────────────────────────────────────────────────────────────────
+
+Measure 5: Revenue by Payment Status
+Measure Name: Revenue Paid
+Revenue Paid = 
+CALCULATE(
+    SUM(FactVisits[BillingAmount]),
+    FactVisits[PaymentStatus] = "Paid"
+)
+
+Measure 6: Collection Rate %
+Collection Rate = 
+DIVIDE(
+    CALCULATE(SUM(FactVisits[BillingAmount]), 
+              FactVisits[PaymentStatus] = "Paid"),
+    SUM(FactVisits[BillingAmount]),
+    0
+) * 100
+
+Measure 7: Month-over-Month Growth
+MoM Growth = 
+VAR CurrentMonth = SUM(FactVisits[BillingAmount])
+VAR PreviousMonth = CALCULATE(
+    SUM(FactVisits[BillingAmount]),
+    DATEADD(FactVisits[VisitDate], -1, MONTH)
+)
+RETURN
+DIVIDE(CurrentMonth - PreviousMonth, PreviousMonth, 0) * 100
+
+ADVANCED MEASURES:
+────────────────────────────────────────────────────────────────────────
+
+Measure 8: Pending Bills Over 60 Days
+Overdue Payments = 
+CALCULATE(
+    SUM(FactVisits[BillingAmount]),
+    FactVisits[PaymentStatus] IN {"Pending", "Partial"},
+    FactVisits[VisitDate] < DATE(2025, 12, 7)  -- 60+ days old
+)
+
+Measure 9: Doctor Utilization Rate
+Doctor Utilization = 
+DIVIDE(
+    COUNTROWS(FactVisits),
+    CALCULATE(
+        DISTINCTCOUNT(DimDoctors[DoctorID]),
+        ALL(FactVisits)
+    ),
+    0
+)
+
+This shows average visits per doctor.
+
+Measure 10: Department Performance Index
+Dept Performance Index = 
+DIVIDE(
+    SUM(FactVisits[BillingAmount]),
+    CALCULATE(
+        SUM(FactVisits[BillingAmount]),
+        ALL(DimDepartments)
+    ),
+    0
+) * 100
+
+Shows each department as % of total revenue.
+
+CONDITIONAL MEASURES (for KPIs):
+────────────────────────────────────────────────────────────────────────
+
+Measure 11: Revenue Status Indicator
+Revenue Status = 
+IF(
+    [Collection Rate] >= 80,
+    "On Target",
+    IF([Collection Rate] >= 70, "At Risk", "Critical")
+)
+
+Measure 12: Capacity Status
+Capacity Status = 
+IF(
+    COUNTROWS(FactVisits) > 20,
+    "High",
+    IF(COUNTROWS(FactVisits) > 10, "Medium", "Low")
+)
+
+================================================================================
+PART 5: DATA MODELING IN POWER BI
+================================================================================
+
+IMPORT THE DATA:
+1. Open Power BI Desktop
+2. Home → Get Data → Text/CSV
+3. Navigate to healthcare_visits_data.csv
+4. Load data
+
+CREATE CALENDAR TABLE (FOR DATE DIMENSION):
+Create Calendar = 
+CALENDAR(
+    DATE(2025, 1, 1),
+    DATE(2026, 12, 31)
+)
+
+Add columns:
+- Year = YEAR([Date])
+- Month = MONTH([Date])
+- Month Name = FORMAT([Date], "MMM")
+- Quarter = "Q" & QUARTER([Date])
+- Week Num = WEEKNUM([Date])
+- Day Name = FORMAT([Date], "dddd")
+
+RELATIONSHIPS:
+1. FactVisits[VisitDate] → Calendar[Date] (one-to-many)
+2. FactVisits[PatientID] → DimPatients[PatientID]
+3. FactVisits[DoctorID] → DimDoctors[DoctorID]
+4. FactVisits[Department] → DimDepartments[DepartmentName]
+
+RELATIONSHIP PROPERTIES:
+- Direction: Single (one-way from dimension to fact)
+- Cardinality: One-to-many
+- Cross-filter direction: Single
+
+================================================================================
+PART 6: VISUALIZATION BEST PRACTICES FOR HEALTHCARE
+================================================================================
+
+CHOOSING RIGHT VISUALIZATION:
+────────────────────────────────────────────────────────────────────────
+
+Revenue Trend → Line Chart
+- Good for time series
+- Helps spot patterns and anomalies
+
+Department Comparison → Column or Bar Chart
+- Good for comparing categories
+- Easy to rank visually
+
+Part-to-whole (Payment Status) → Pie or Donut Chart
+- Shows proportions
+- Avoid if more than 4 categories
+
+Patient Age Distribution → Histogram
+- Shows frequency distribution
+- Identifies age groups
+
+Top Doctors → Top N Table
+- Sortable, detailed information
+- Supports drill-down
+
+Performance vs Target → Bullet Chart
+- Shows KPI performance
+- Visual indication of performance level
+
+TIME-BASED FILTERING BEST PRACTICES:
+────────────────────────────────────────────────────────────────────────
+
+Slicer for Date Range
+Power BI Feature: Slicer with "Between" option
+Allows: From Date ─────── To Date
+Users can select custom ranges
+
+Bookmark Feature:
+Create bookmarks for "Common Views":
+- This Week
+- This Month
+- Last Quarter
+- YTD
+
+INTERACTIVITY FEATURES:
+────────────────────────────────────────────────────────────────────────
+
+Cross-filtering:
+- Click department in pie chart
+- Other visuals automatically filter
+
+Drill-through:
+- Right-click on doctor name
+- See patient-level details
+- Return with back button
+
+Tooltips:
+- Hover over data point
+- Show additional details (not in main visual)
+- Keep tooltip clean (3-4 fields max)
+
+================================================================================
+PART 7: POWER BI Q&A SECTION
+================================================================================
+
+Q1: What is the difference between Import and DirectQuery modes?
+────────────────────────────────────────────────────────────────────────
+ANSWER:
+
+IMPORT MODE:
+- Data copied into Power BI
+- Stored in compressed database
+- Fast performance
+- Requires refresh to get updates
+- Best for: Small to medium datasets (<1GB)
+
+HEALTHCARE EXAMPLE:
+Historical billing data, static reference tables
+
+DirectQuery MODE:
+- Real-time connection to source database
+- No data copied
+- Slower performance (database dependent)
+- Always current data
+- Best for: Real-time dashboards, massive datasets
+
+HEALTHCARE EXAMPLE:
+Real-time bed availability, current patient admissions
+
+FOR THIS PROJECT:
+Use Import Mode - historical analysis, faster refreshes, <1GB data
+
+────────────────────────────────────────────────────────────────────────
+
+Q2: How do you create a Calendar (Date Dimension) table?
+────────────────────────────────────────────────────────────────────────
+ANSWER:
+
+Option 1: Create in Power BI using DAX
+
+Calendar = CALENDAR(DATE(2025,1,1), DATE(2026,12,31))
+
+Add columns:
+Year = YEAR([Date])
+MonthNum = MONTH([Date])
+MonthName = FORMAT([Date], "MMMM")
+Quarter = "Q" & ROUNDUP(MONTH([Date])/3, 0)
+WeekNum = WEEKNUM([Date])
+DayName = FORMAT([Date], "dddd")
+
+Option 2: Use SQL to generate in source database
+- More efficient for large ranges
+- Can include fiscal calendars
+
+WHY CALENDAR TABLE IS IMPORTANT:
+✓ Ensures complete month-end analysis (including empty dates)
+✓ Enables proper time intelligence (YTD, MTD)
+✓ Allows fiscal vs calendar year comparisons
+✓ Better filtering in slicers
+
+────────────────────────────────────────────────────────────────────────
+
+Q3: Write a DAX formula to calculate Year-to-Date Revenue.
+────────────────────────────────────────────────────────────────────────
+ANSWER:
+
+YTD Revenue = 
+CALCULATE(
+    SUM(FactVisits[BillingAmount]),
+    DATESYTD(Calendar[Date])
+)
+
+EXPLANATION:
+- CALCULATE: Modifies filter context
+- SUM: Aggregates billing amounts
+- DATESYTD: Date intelligence function
+  Returns all dates from Jan 1 to current date
+
+HEALTHCARE USE:
+Tracks cumulative revenue Jan-Dec for year-end reporting
+
+VARIATION - Current Month Revenue:
+MTD Revenue = 
+CALCULATE(
+    SUM(FactVisits[BillingAmount]),
+    DATESMTD(Calendar[Date])
+)
+
+VARIATION - Last Year Comparison:
+YTD Prior Year = 
+CALCULATE(
+    SUM(FactVisits[BillingAmount]),
+    DATESYTD(
+        DATEADD(Calendar[Date], -1, YEAR)
+    )
+)
+
+────────────────────────────────────────────────────────────────────────
+
+Q4: How would you handle a fact table with multiple levels of granularity?
+────────────────────────────────────────────────────────────────────────
+ANSWER:
+
+PROBLEM:
+If fact table has:
+- Patient-level data (patient visits)
+- Doctor-level data (doctor information)
+- Date-level data (visit timing)
+
+Aggregations become incorrect because duplicate keys exist.
+
+SOLUTION: Additive Measures
+
+Additive Measures (correct at any level):
+- SUM - Works at any dimension level ✓
+- COUNT - Works at any dimension level ✓
+
+Non-Additive Measures (need careful handling):
+- AVERAGE - Divides by dimension cardinality ✗
+- PERCENTAGE - Must use weighted average ✗
+
+HEALTHCARE EXAMPLE:
+FactVisits includes:
+- Patient visits (detail level)
+- Doctor assignments
+- Department assignments
+
+CORRECT APPROACH:
+Average Billing = DIVIDE(SUM(BillingAmount), COUNTROWS(FactVisits))
+
+This ensures denominator matches numerator filtering.
+
+────────────────────────────────────────────────────────────────────────
+
+Q5: How do you optimize a slow Power BI report?
+────────────────────────────────────────────────────────────────────────
+ANSWER:
+
+1. IDENTIFY BOTTLENECKS
+   - Open Performance Analyzer
+   - Sort by "Duration" column
+   - Identify slowest visuals
+
+2. REDUCE DATA LOADED
+   - Use column filtering (remove unnecessary fields)
+   - Aggregate at source (SQL query, not Power BI)
+   - Use DirectQuery for subsets of large tables
+
+3. OPTIMIZE DAX
+   - Remove FILTER in favor of CALCULATE
+   - Use SELECTEDVALUE instead of VALUES when single value
+   - Avoid nested CALCULATE statements
+   - Use VAR for intermediate calculations
+
+SLOW DAX:
+Measure = CALCULATE(SUM(Facts[Amount]), 
+                    FILTER(Products, Products[Color] = "Red"))
+
+OPTIMIZED DAX:
+Measure = CALCULATE(SUM(Facts[Amount]), Products[Color] = "Red")
+
+4. AGGREGATIONS (Premium Feature)
+   - Pre-aggregate common combinations
+   - Directs queries to summary table when possible
+
+5. STAR SCHEMA DESIGN
+   - Separate fact from dimensions
+   - No many-to-many relationships (use bridge table)
+   - Proper indexes in source database
+
+6. REFRESH STRATEGY
+   - Incremental refresh (only new data)
+   - Scheduled off-peak refreshes
+   - Reduce refresh frequency if possible
+
+HEALTHCARE DASHBOARD OPTIMIZATION:
+- Import historical data (2 years)
+- DirectQuery recent month (for current billing)
+- Aggregate at SQL level (group by department, month)
+- Pre-calculate year-to-date measures
+
+────────────────────────────────────────────────────────────────────────
+
+Q6: Explain Row-Level Security (RLS) in Power BI. Healthcare application?
+────────────────────────────────────────────────────────────────────────
+ANSWER:
+
+Row-Level Security:
+Restricts data visibility based on user login.
+
+HEALTHCARE SCENARIO:
+Department heads should only see their department's data.
+Doctors should only see their patient data.
+Finance can see all data.
+
+IMPLEMENTATION IN POWER BI:
+
+Step 1: Add RLS Table with UserEmail and Department
+SecurityTable:
+- UserEmail | Department
+- jsmith@hospital.com | Cardiology
+- pjones@hospital.com | Orthopedics
+
+Step 2: Create DAX Role
+Modeling → Manage Roles → New Role
+
+Add RLS Formula:
+[Department] = USERNAME()
+
+This filters FactVisits to only matching department.
+
+Step 3: Test Role
+View as → Role
+
+HEALTHCARE COMPLIANCE BENEFIT:
+✓ HIPAA Compliance - No unauthorized patient data access
+✓ Privacy - Doctors only see assigned patients
+✓ Audit Trail - Power BI logs all data access
+✓ Automatic - No manual report versions needed
+
+LIMITATION:
+RLS only applies to imported data. For DirectQuery, 
+need native database RLS as well.
+
+────────────────────────────────────────────────────────────────────────
+
+Q7: How would you design a drill-down dashboard?
+────────────────────────────────────────────────────────────────────────
+ANSWER:
+
+PAGE 1: EXECUTIVE SUMMARY (Top level)
+────────────────────────────────────────
+Visual: Revenue by Department (Column Chart)
+
+PAGE 2: DEPARTMENT DETAIL (Drill-through)
+────────────────────────────────────────
+When user right-clicks "Cardiology":
+→ Drill-through to department page
+
+Shows:
+- Department KPIs
+- Doctor productivity
+- Patient demographics
+- Billing details
+
+PAGE 3: DOCTOR DETAIL (Drill-through)
+────────────────────────────────────────
+When user clicks doctor:
+→ Shows doctor's patient list
+→ Visit history
+→ Billing performance
+
+DAX IMPLEMENTATION:
+
+Create drill-through fields:
+1. Modeling → New Column
+2. DepartmentKey = [DepartmentID]
+3. DoctorKey = [DoctorID]
+
+In Page Properties:
+- Drill through filters: [Department]
+
+This enables right-click drill-through.
+
+HEALTHCARE WORKFLOW:
+CEO sees revenue by department
+→ Clicks Cardiology
+→ Sees 10 cardiologists
+→ Clicks "Dr. Kumar"
+→ Sees his 50 patients
+→ Clicks "Rahul Sharma"
+→ Views patient's full history
+
+────────────────────────────────────────────────────────────────────────
+
+Q8: What are KPIs and how would you display them?
+────────────────────────────────────────────────────────────────────────
+ANSWER:
+
+KPI (Key Performance Indicator):
+Metric aligned with business objectives.
+
+HEALTHCARE KPIs:
+
+1. Revenue KPIs
+   - Total Revenue
+   - Collection Rate (% of billed collected)
+   - Average Billing per Visit
+   - Revenue by Department
+
+2. Operational KPIs
+   - Total Visits
+   - Average Wait Time (if available)
+   - Doctor Utilization (visits per doctor)
+   - Department Capacity (bed utilization)
+
+3. Quality KPIs
+   - Patient Satisfaction Score
+   - Readmission Rate
+   - Complaint Resolution Time
+
+VISUALIZATION IN POWER BI:
+
+KPI Visual:
+- Shows current value
+- Shows trend (up/down arrow)
+- Shows target with color coding
+  Green: On target
+  Yellow: At risk
+  Red: Below target
+
+Card Visual with Sparkline:
+- Large number display
+- Mini trend chart
+- Shows direction at a glance
+
+Gauge Chart:
+- Semicircular or full circle
+- Shows progress toward target
+- Color zones (good, warning, bad)
+
+EXAMPLE KPI CARD:
+┌─────────────────────────────┐
+│ Total Revenue (Feb 2026)     │
+│ ₹ 250,000        ↑ +12%      │
+│ Target: ₹ 300,000            │
+│ Status: 83% of Target (GOOD) │
+└─────────────────────────────┘
+
+────────────────────────────────────────────────────────────────────────
+
+Q9: How do you handle data quality issues in Power BI?
+────────────────────────────────────────────────────────────────────────
+ANSWER:
+
+COMMON DATA ISSUES:
+
+1. NULL VALUES
+   Solution: IFERROR, COALESCE, BLANK()
+   
+   Billing Amount = IFERROR(FactVisits[BillingAmount], 0)
+   Doctor Name = COALESCE(DimDoctors[Name], "Unknown")
+
+2. DUPLICATE ROWS
+   Solution: Remove duplicates in Query Editor
+   - Power Query → Remove Rows → Remove Duplicates
+
+3. MISMATCHED DATA TYPES
+   Solution: Convert in Power Query
+   - Transform → Data Type → (select type)
+
+4. INCONSISTENT FORMATTING
+   Solution: Create calculated columns
+   
+   Normalized Department = UPPER(DimDepartments[Name])
+
+5. REFERENTIAL INTEGRITY ISSUES
+   Solution: Left outer join
+   - Keep all fact rows even if dimension missing
+   - Creates NULL in dimension columns (shows as "Unknown")
+
+HEALTHCARE SPECIFIC ISSUES:
+
+Diagnosis Codes:
+- Clean: J00.00, J00.01
+- Dirty: j0000, J000, J00
+
+Solution:
+Clean Diagnosis = UPPER(TRIM(FactVisits[DiagnosisCode]))
+
+Payment Status:
+- Values: "Paid", "paid", "PAID"
+
+Solution:
+Clean Status = PROPER(FactVisits[PaymentStatus])
+
+AGE VALIDATION:
+Invalid ages like -5, 200 in patient data
+
+Solution:
+Valid Age = IF(AND(DimPatients[Age]>=0, DimPatients[Age]<=150),
+                DimPatients[Age],
+                0)
+
+────────────────────────────────────────────────────────────────────────
+
+Q10: Describe a healthcare dashboard project you'd build for Altera.
+────────────────────────────────────────────────────────────────────────
+ANSWER:
+
+PROJECT: 30-Day Hospital Operations Dashboard for Clinical Leadership
+
+SCOPE:
+- Real-time view of hospital operations
+- Daily refresh from EHR data
+- Accessible to 50+ users (doctors, admins, finance)
+
+DASHBOARD PAGES:
+
+1. Executive Overview (5 min view)
+   - Key metrics (revenue, visits, active beds)
+   - Department performance ranking
+   - Alerts (overdue payments, critical capacity)
+
+2. Clinical Operations
+   - ICU/ward bed availability
+   - Doctor schedule vs actual load
+   - Patient admission/discharge trends
+
+3. Financial Health
+   - Daily revenue tracking
+   - Collection rate by department
+   - Aging receivables analysis
+
+4. Patient Analytics
+   - Admission source analysis
+   - Length of stay metrics
+   - Readmission rates by department
+
+5. Department Deep-dives
+   - Drill-through to each department
+   - Doctor productivity metrics
+   - Patient demographics
+
+DATA MODEL:
+- Star schema (1 fact, 5 dimensions)
+- Direct connection to EHR via SQL Server
+- Incremental refresh for large tables
+
+SECURITY:
+- Row-level security by department
+- Admin view (unrestricted)
+- Doctor view (own patients only)
+
+DEPLOYMENT:
+- Power BI Premium for user base >100
+- Shared reports in Power BI Service
+- Mobile optimization for on-the-go
+
+KEY METRICS:
+- Revenue: ₹ 250K/day target
+- Collections: 85% target
+- Bed utilization: 70% target
+- Patient satisfaction: 4.5/5 target
